@@ -3,13 +3,17 @@ package com.org.aryansoft.foodonwheels;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.os.Bundle;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 
 import android.os.Handler;
+import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 
@@ -23,6 +27,8 @@ import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 
 import com.google.android.material.navigation.NavigationView;
+import com.org.aryansoft.foodonwheels.Utils.GPSTracker;
+import com.org.aryansoft.foodonwheels.Utils.Utility;
 
 import androidx.drawerlayout.widget.DrawerLayout;
 
@@ -30,12 +36,20 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
 import android.view.Menu;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Locale;
 
 public class DashboardActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
 
     //    private AppBarConfiguration mAppBarConfiguration;
+    private static final String TAG = "DashboardActivity";
     private Context context;
     private Boolean doubleBackToExitPressedOnce = false;
     String mPermission = Manifest.permission.ACCESS_FINE_LOCATION;
@@ -45,6 +59,7 @@ public class DashboardActivity extends AppCompatActivity implements NavigationVi
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         setContentView(R.layout.activity_dashboard);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -77,17 +92,82 @@ public class DashboardActivity extends AppCompatActivity implements NavigationVi
 //        NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
 //        NavigationUI.setupWithNavController(navigationView, navController);
 
+        init();
+
+    }
+
+    Geocoder geocoder;
+    List<Address> addresses;
+    TextView tvCurrentAddress;
+    EditText etSearchRestaurant;
+
+    private void init() {
+        tvCurrentAddress = findViewById(R.id.tvCurrentAddress);
+        etSearchRestaurant = findViewById(R.id.etSearchRestaurant);
         try {
             if (ActivityCompat.checkSelfPermission(DashboardActivity.this, mPermission)
                     != PackageManager.PERMISSION_GRANTED) {
 
                 ActivityCompat.requestPermissions(DashboardActivity.this, new String[]{mPermission, mPermission2},
                         REQUEST_CODE_PERMISSION);
+            } else {
+                getFormattedAddress();
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
+        
+    }
 
+    public void getFormattedAddress(){
+        // create class object
+        geocoder = new Geocoder(this, Locale.getDefault());
+        String tmpAddress="";
+        String location = "";
+        GPSTracker gps = new GPSTracker(this);
+        double latitude;
+        double longitude;
+
+        // check if GPS enabled
+        if(gps.canGetLocation()){
+
+            latitude  = gps.getLatitude();
+            longitude = gps.getLongitude();
+
+            try {
+                addresses = geocoder.getFromLocation(latitude, longitude, 1); // Here 1 represent max location result to returned, by documents it recommended 1 to 5
+                Log.d(TAG, "getAddress: " + addresses);
+                if (!addresses.isEmpty()) {
+                    tmpAddress = addresses.get(0).getAddressLine(0)
+//                            + "\nlocality: " + addresses.get(0).getLocality() + "\nAdminArea: "
+//                            + addresses.get(0).getAdminArea() + "\nSubAdminArea: " + addresses.get(0).getSubAdminArea() + "\nCountry: "
+//                            + addresses.get(0).getCountryName() + "\nFeatureName:" + addresses.get(0).getFeatureName() + "\nPostal: "
+//                            + addresses.get(0).getPostalCode() + "\nSubLocality:" + addresses.get(0).getSubLocality() + "\nPremises:"
+//                            + addresses.get(0).getPremises() + "\nThoroughfare:" + addresses.get(0).getThoroughfare()
+                    ;
+
+                    tvCurrentAddress.setText(tmpAddress);
+                    location = addresses.get(0).getLocality();// gets city
+
+                } else {
+                    Toast.makeText(context, "Could not detect location. Please try again.", Toast.LENGTH_SHORT).show();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            Utility.saveOnSharedPreferences(context, tmpAddress, "last_known_address");
+            Utility.saveOnSharedPreferences(context, location, "last_known_city");
+            Utility.saveOnSharedPreferences(context, latitude, "last_known_latitude");
+            Utility.saveOnSharedPreferences(context, longitude, "last_known_longitude");
+
+
+        }else{
+            // can't get location
+            // GPS or Network is not enabled
+            // Ask user to enable GPS/network in settings
+            gps.showSettingsAlert();
+        }
     }
 
     @Override
